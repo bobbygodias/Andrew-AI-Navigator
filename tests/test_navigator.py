@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from dataclasses import dataclass
 
 from andrew_ai_navigator.engine import EngineCapabilities
@@ -107,7 +108,7 @@ class FakeVisualPerceptor:
         )
 
 
-async def test_visual_only_surface_object_is_clickable_by_geometry():
+async def _visual_only_case() -> None:
     engine = FakeEngine()
     navigator = Navigator(engine, visual_perceptor=FakeVisualPerceptor())
 
@@ -119,7 +120,11 @@ async def test_visual_only_surface_object_is_clickable_by_geometry():
     assert engine.semantic_clicks == []
 
 
-async def test_dom_surface_object_prefers_semantic_click():
+def test_visual_only_surface_object_is_clickable_by_geometry() -> None:
+    asyncio.run(_visual_only_case())
+
+
+async def _dom_semantic_case() -> None:
     dom = SurfaceObject(
         id="e1",
         generation=1,
@@ -135,3 +140,7 @@ async def test_dom_surface_object_prefers_semantic_click():
 
     assert engine.semantic_clicks == ["e1"]
     assert engine.pointer_clicks == []
+
+
+def test_dom_surface_object_prefers_semantic_click() -> None:
+    asyncio.run(_dom_semantic_case())
