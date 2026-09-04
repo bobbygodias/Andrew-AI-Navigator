@@ -93,3 +93,43 @@ async def _smoke(tmp_path) -> None:
 
 def test_real_chromium_login_like_surface_flow(tmp_path) -> None:
     asyncio.run(_smoke(tmp_path))
+
+
+async def _cookie_persistence(tmp_path) -> None:
+    identity = "persistent-cookie-test"
+
+    first = PlaywrightEngine(identity=identity, runtime_root=tmp_path, headless=True)
+    await first.start()
+    try:
+        assert first._context is not None
+        await first._context.add_cookies(
+            [
+                {
+                    "name": "navigator_persistence_probe",
+                    "value": "survives-restart",
+                    "url": "https://example.com/",
+                    "expires": 2_000_000_000,
+                    "httpOnly": True,
+                    "secure": True,
+                    "sameSite": "Lax",
+                }
+            ]
+        )
+    finally:
+        await first.stop()
+
+    second = PlaywrightEngine(identity=identity, runtime_root=tmp_path, headless=True)
+    await second.start()
+    try:
+        assert second._context is not None
+        cookies = await second._context.cookies("https://example.com/")
+        probe = next(cookie for cookie in cookies if cookie["name"] == "navigator_persistence_probe")
+        assert probe["value"] == "survives-restart"
+        assert probe["httpOnly"] is True
+        assert probe["secure"] is True
+    finally:
+        await second.stop()
+
+
+def test_persistent_identity_retains_cookie_across_restart(tmp_path) -> None:
+    asyncio.run(_cookie_persistence(tmp_path))
