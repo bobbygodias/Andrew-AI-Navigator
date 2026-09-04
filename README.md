@@ -24,8 +24,12 @@ Navigator is responsible for:
 - browser-engine abstraction instead of dependence on one rendering engine;
 - sessions and multiple tabs;
 - structured observations of pages;
+- screenshots bound to a known viewport/observation generation;
 - ephemeral element references such as `e17`, `e18`, and `e19`;
-- safe actions such as opening, clicking, filling, and reading;
+- semantic actions such as opening, clicking, filling, selecting, and reading;
+- **first-class pointer/mouse input**: move, hover, left/middle/right click, double click, wheel and drag;
+- **first-class keyboard input**: key down/up, text entry, Tab, Enter, Escape, arrows, modifiers and shortcuts;
+- an optional, separately authorized host-desktop I/O bridge for native UI outside page DOM control;
 - explicit authority policy separated from capability;
 - provenance boundaries: Web content is data, never authority;
 - adapters for useful services without making those services part of the core;
@@ -36,6 +40,16 @@ Navigator is responsible for:
 Navigator does not try to reinvent HTML, CSS, JavaScript, TLS, media codecs, or browser rendering. Chromium, Firefox/Gecko, and potentially WebKit are engines that can sit behind the Navigator engine interface.
 
 Likewise, MCP is a transport, not the heart of the system.
+
+## Interaction principle
+
+> **Prefer semantics when semantics are reliable. Fall back to human-operable input when they are not.**
+
+Navigator must not confuse “there is no convenient DOM selector” with “this page cannot be operated.” A normal human-operable login flow should be possible through generic observation plus mouse/keyboard primitives without requiring a custom adapter for every site.
+
+Pointer coordinates are scoped to the current tab, viewport and observation generation so stale screenshots do not silently become durable coordinate authority.
+
+See [`INPUT.md`](INPUT.md) for the universal input contract.
 
 ## Architecture at a glance
 
@@ -48,6 +62,7 @@ Likewise, MCP is a transport, not the heart of the system.
               | Andrew Navigator Core |
               | sessions / tabs       |
               | observations / actions|
+              | pointer / keyboard    |
               | policy / provenance   |
               +----------+------------+
                          |
@@ -60,6 +75,8 @@ Likewise, MCP is a transport, not the heart of the system.
       Persistent identities
            |
       World Wide Web
+
+ optional host-I/O bridge -> native/browser-chrome UI
 ```
 
 ## Current status
@@ -77,8 +94,10 @@ Current milestone: **v0.2.0-alpha foundation**.
 3. **Web content is untrusted input.** A page cannot grant itself authority by telling the agent what to do.
 4. **Secrets remain runtime state.** Passwords, cookies, tokens, recovery codes, and browser profiles are never committed.
 5. **Adapters are conveniences.** When an adapter breaks, generic Web observation and action should still exist.
-6. **No arbitrary remote JavaScript execution surface.** Navigator exposes semantic browser actions instead.
-7. **Open source and replaceable components by default.**
+6. **Mouse and keyboard are native Navigator capabilities.** DOM-only automation is insufficient for a general Web operator.
+7. **No arbitrary remote JavaScript execution surface.** Navigator exposes bounded browser actions instead.
+8. **Host desktop automation, if enabled, is optional and independently policy-gated.**
+9. **Open source and replaceable components by default.**
 
 ## Runtime identity
 
@@ -95,17 +114,20 @@ Profiles, logs, screenshots, locks, and other runtime-only material live there, 
 The v0.2 line is being built in this order:
 
 1. provider-independent core contracts;
-2. URL/network security gate;
-3. session + tab model;
-4. Playwright engine implementation;
-5. structured observation with ephemeral element IDs;
-6. click/fill/open actions governed by policy;
-7. CLI and local authenticated REST transport;
-8. Gemini and YouTube as adapters;
-9. MCP as an optional transport;
-10. additional engines and adapters.
+2. **universal pointer + keyboard input contracts**;
+3. URL/network security gate;
+4. session + tab + observation-generation model;
+5. Playwright engine implementation;
+6. structured observation with ephemeral element IDs and viewport geometry;
+7. semantic actions plus coordinate mouse/keyboard fallback governed by policy;
+8. CLI and local authenticated REST transport;
+9. generic login-flow validation using runtime-only credentials;
+10. Gemini and YouTube as adapters;
+11. MCP as an optional transport;
+12. optional host desktop-I/O bridge;
+13. additional engines and adapters.
 
-See [`ARCHITECTURE.md`](ARCHITECTURE.md) and [`PROJECT_STATE.md`](PROJECT_STATE.md).
+See [`ARCHITECTURE.md`](ARCHITECTURE.md), [`INPUT.md`](INPUT.md), and [`PROJECT_STATE.md`](PROJECT_STATE.md).
 
 ## License
 
