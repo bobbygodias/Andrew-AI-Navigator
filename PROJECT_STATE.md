@@ -2,7 +2,7 @@
 
 **Date:** 2026-09-04  
 **Milestone:** `0.2.0-alpha` foundation  
-**Status:** provider-independent repository initialized; universal input requirement promoted to core architecture.
+**Status:** provider-independent repository initialized; universal input and surface-first perception promoted to core architecture.
 
 ## Why this repository exists
 
@@ -12,11 +12,23 @@ This repository corrects that.
 
 Andrew AI Navigator is being rebuilt so that its Web capability exists independently of any AI platform.
 
-## Constitutional invariant
+## Constitutional invariants
 
 **Andrew AI Navigator is a standalone capability. AI platforms are clients, not dependencies.**
 
 A build that requires ChatGPT/OpenAI merely to exist fails this invariant.
+
+A second invariant now governs perception:
+
+**The rendered Web surface is operational reality.**
+
+DOM, accessibility data, geometry, pixels, frames and browser state are perception channels. None alone is allowed to redefine the Web as only the portion easiest to automate.
+
+The project therefore keeps three questions distinct:
+
+1. **Perception:** what exists on the browser surface?
+2. **Capability:** what actions can the Navigator physically perform?
+3. **Policy:** which available actions are authorized in the current context?
 
 ## Proven by v0.1
 
@@ -42,20 +54,25 @@ These results are treated as experimental evidence, not as immutable architectur
 - Browser engines sit behind a replaceable interface.
 - Identity belongs to Navigator runtime state.
 - Sessions and tabs replace the single-active-page model.
-- Page observations produce ephemeral element references.
-- Generic actions are semantic; arbitrary JavaScript execution is not part of the remote action surface.
+- Page observations are generation-scoped.
+- Surface perception fuses multiple channels rather than treating DOM as reality.
+- Pixel/screenshot capture and visual understanding are separate capabilities.
+- Visual understanding sits behind a provider-independent `VisualPerceptor` contract.
+- Surface objects can exist with weak or absent DOM semantics if other channels perceive them.
+- Generic actions are bounded; arbitrary remote JavaScript execution is not part of the public action surface.
 - **Pointer/mouse and keyboard input are first-class Navigator capabilities.**
-- Semantic targeting is preferred, but the Navigator must fall back to human-operable coordinate and key input when DOM/accessibility targeting is insufficient.
+- Semantic targeting is preferred when reliable, but coordinate and keyboard input remain native capabilities over the same surface.
 - Coordinate actions are bound to tab, viewport and observation generation to reduce stale-target errors.
-- A generic human-operable login flow must not require a site-specific adapter merely because the page needs pointer/keyboard interaction.
+- A generic authenticated browsing flow must not require a site-specific adapter merely because the surface needs pointer/keyboard interaction.
 - Native UI outside browser-page control may later be handled by an optional, separately authorized host desktop-I/O bridge.
 - Capability and authorization are separate.
 - Web content is untrusted data and cannot grant itself authority.
 - Network filtering must include DNS resolution and redirect/subresource defenses, not only literal IP checks.
+- Real-Web runtime requirements include browser-native cookies/storage, normal TLS/CA validation, JavaScript, Unicode, frames and popup handling.
 
 ## Universal input requirement
 
-The input contract is now a foundation requirement, not a future enhancement.
+The input contract is a foundation requirement, not a future enhancement.
 
 Browser-surface pointer support must cover at least:
 
@@ -77,21 +94,54 @@ Browser-surface keyboard support must cover at least:
 
 See `INPUT.md`.
 
+## Surface perception requirement
+
+The perception model is defined in `PERCEPTION.md`.
+
+Current code now includes:
+
+- `PerceptionChannel`;
+- `SurfaceEvidence`;
+- `SurfaceObject`;
+- `Rect`;
+- `ObservationFrame`;
+- `VisualFrame`;
+- provider-independent `VisualPerceptor` protocol.
+
+The BrowserEngine contract now distinguishes compact semantic observation from full multi-channel surface observation and reports observation/runtime capabilities explicitly.
+
+A pixel-only perceived object is valid. That rule exists specifically to prevent future implementations from silently collapsing the browser back into a DOM scraper.
+
+## Real-Web runtime requirement
+
+See `WEB_RUNTIME.md`.
+
+The selected browser engine is expected to preserve ordinary Web behavior including:
+
+- browser-native cookie/storage continuity;
+- identity isolation;
+- standards-compliant TLS/CA validation;
+- JavaScript and modern Web application execution;
+- Unicode and mixed writing systems;
+- frames, tabs, popups and modal browsing contexts;
+- canvas/SVG/WebGL/custom-rendered surfaces as perceivable browser reality.
+
 ## Current implementation step
 
-Foundation files are being added in this order:
+Foundation work is now ordered as follows:
 
 1. documentation and architectural contracts;
 2. universal input contracts;
-3. package metadata;
-4. core data models;
-5. policy engine;
-6. network target security;
-7. browser-engine protocol including semantic + pointer + keyboard capability reporting;
-8. first Playwright implementation;
-9. Navigator orchestration core;
-10. tests;
-11. transports and service adapters.
+3. surface-first perception contracts;
+4. package metadata;
+5. core data models;
+6. policy engine;
+7. network target security;
+8. browser-engine protocol with semantic + pointer + keyboard + perception capability reporting;
+9. first Playwright implementation;
+10. Navigator orchestration core;
+11. CI and automated tests;
+12. transports and service adapters.
 
 ## Immediate acceptance criteria
 
@@ -102,15 +152,26 @@ The alpha foundation is considered useful when a local host can:
 3. create a named browser identity;
 4. open a public HTTPS page through the Playwright engine;
 5. create multiple tabs;
-6. obtain a structured observation and screenshot geometry;
-7. receive ephemeral element IDs;
-8. click/fill through policy-approved semantic actions;
-9. move/click/scroll/drag through pointer input;
-10. type text and operate navigation/special keys through keyboard input;
-11. complete an ordinary generic login interaction where site policy and authentication requirements permit it;
-12. reject protected/private network destinations by default;
-13. keep passwords/tokens/runtime secrets out of repository and audit logs;
-14. shut down without leaking runtime secrets into the repository.
+6. obtain a generation-scoped surface observation;
+7. preserve semantic/accessibility/geometry evidence when available;
+8. retain a screenshot/pixel channel tied to the same viewport;
+9. represent a visible control even when useful DOM semantics are absent;
+10. click/fill through policy-approved semantic actions;
+11. move/click/scroll/drag through pointer input;
+12. type text and operate navigation/special keys through keyboard input;
+13. persist ordinary authenticated browser state without placing secrets in source control;
+14. execute modern JavaScript applications normally;
+15. preserve Unicode/multilingual content;
+16. handle frame/popup/tab transitions without losing identity;
+17. reject protected/private network destinations by default;
+18. keep passwords/tokens/runtime secrets out of repository and audit logs;
+19. shut down without leaking runtime secrets into the repository.
+
+## Tests and CI
+
+Foundation tests cover the original core contracts plus the new perception model, including a pixel-only surface object and generation-bound surface objects.
+
+A GitHub Actions workflow for Python 3.11 and 3.12 has been added. At the time this state file was written, the workflow had been committed but GitHub had not yet reported a run through the connected API, so no CI result is claimed here.
 
 ## Next adapters
 
