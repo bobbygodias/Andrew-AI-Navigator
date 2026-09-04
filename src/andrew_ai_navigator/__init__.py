@@ -5,8 +5,10 @@ not dependencies.
 """
 
 from .engine import BrowserEngine, EngineCapabilities
+from .fusion import fuse_surface_objects, overlap_score
 from .input import Key, MouseButton, Point
 from .models import Observation, Provenance, TabRef
+from .navigator import Navigator, NavigatorPolicyDenied, SurfaceTargetUnavailable
 from .perception import (
     ObservationFrame,
     PerceptionChannel,
@@ -14,16 +16,19 @@ from .perception import (
     SurfaceEvidence,
     SurfaceObject,
 )
-from .policy import ActionContext, Decision, PolicyEngine
+from .policy import ActionContext, ActionKind, Decision, PolicyEngine
 from .visual import VisualFrame, VisualPerceptor
 
 __all__ = [
     "ActionContext",
+    "ActionKind",
     "BrowserEngine",
     "Decision",
     "EngineCapabilities",
     "Key",
     "MouseButton",
+    "Navigator",
+    "NavigatorPolicyDenied",
     "Observation",
     "ObservationFrame",
     "PerceptionChannel",
@@ -33,9 +38,12 @@ __all__ = [
     "Rect",
     "SurfaceEvidence",
     "SurfaceObject",
+    "SurfaceTargetUnavailable",
     "TabRef",
     "VisualFrame",
     "VisualPerceptor",
+    "fuse_surface_objects",
+    "overlap_score",
 ]
 
 __version__ = "0.2.0a0"
