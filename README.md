@@ -6,7 +6,7 @@
 
 Andrew AI Navigator is an open-source project for giving an AI agent a durable, policy-governed way to observe and operate the World Wide Web through a real browser identity.
 
-It is intentionally **not** an OpenAI, ChatGPT, Gemini, Claude, MCP, or any other vendor-specific project. Those systems may connect to Navigator, but none of them defines whether Navigator exists or works.
+It is intentionally **not** an OpenAI, ChatGPT, Gemini, Claude, MCP, or any other vendor-specific project. Those systems may connect to Navigator, but none of them defines whether Navigator exists.
 
 ## The constitutional test
 
@@ -53,7 +53,7 @@ Navigator is responsible for:
 
 ## What Navigator does not own
 
-Navigator does not try to reinvent HTML, CSS, JavaScript, TLS, media codecs, or browser rendering. Chromium, Firefox/Gecko, and potentially WebKit are engines that can sit behind the Navigator engine interface.
+Navigator does not try to reinvent HTML, CSS, JavaScript, TLS, media codecs, or browser rendering. Chromium, Firefox/Gecko, and potentially WebKit are engines that can sit behind the Navigator engine abstraction.
 
 Likewise, MCP is a transport, not the heart of the system.
 
@@ -61,7 +61,7 @@ Likewise, MCP is a transport, not the heart of the system.
 
 > **Prefer semantics when they are reliable, but never confuse missing semantics with missing reality.**
 
-Navigator must be able to move from understanding to physical interaction through the same observation frame. A target may be activated semantically, by focused keyboard input, or through pointer coordinates derived from rendered geometry.
+Navigator must be able to move from understanding to physical interaction through the same observation frame. A target may be activated semantically, by focused keyboard input, or through pointer coordinates.
 
 Pointer coordinates are scoped to the current tab, viewport and observation generation so stale screenshots do not silently become durable coordinate authority.
 
@@ -82,15 +82,15 @@ See [`INPUT.md`](INPUT.md) for the universal input contract.
               | policy / provenance   |
               +----------+------------+
                          |
-           +-------------+-------------+
-           |                           |
-      Browser engines               Adapters
-   Playwright/Chromium            Gemini, YouTube,
-   Firefox, WebKit...             GitHub, Drive...
-           |
-      Persistent identities
-           |
-      World Wide Web
+             +-------------+-------------+
+             |                           |
+        Browser engines               Adapters
+     Playwright/Chromium            Gemini, YouTube,
+     Firefox, WebKit...             GitHub, Drive...
+             |
+        Persistent identities
+             |
+        World Wide Web
 
  visual perceptors <-> screenshot/pixel channel
  optional host-I/O bridge -> native/browser-chrome UI
@@ -100,7 +100,7 @@ See [`INPUT.md`](INPUT.md) for the universal input contract.
 
 This repository is the clean architectural successor to the `Andrew Navigator v0.1.0` prototype.
 
-The prototype proved persistent Chromium identity, Google/Gemini Web UI automation, YouTube metadata/transcript extraction, CDP attachment, and a narrow MCP surface. The new repository deliberately moves the center of gravity away from Playwright, Gemini, and MCP and into a provider-independent core.
+The prototype proved persistent Chromium identity, Google/Gemini Web UI automation, YouTube metadata/transcript extraction, CDP attachment, and a narrow MCP surface. The new repository deliberately restarts from first principles.
 
 Current milestone: **v0.2.0-alpha foundation**.
 
@@ -150,6 +150,13 @@ The v0.2 line is being built in this order:
 16. additional engines and adapters.
 
 See [`ARCHITECTURE.md`](ARCHITECTURE.md), [`PERCEPTION.md`](PERCEPTION.md), [`WEB_RUNTIME.md`](WEB_RUNTIME.md), [`INPUT.md`](INPUT.md), and [`PROJECT_STATE.md`](PROJECT_STATE.md).
+
+## Contributors & Credits
+
+**Core Contributors:**
+
+- **Andrew Vox** — Co-author, Principal Developer
+- **bobbygodias** — Repository Maintainer
 
 ## License
 
