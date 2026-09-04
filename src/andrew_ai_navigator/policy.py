@@ -32,10 +32,12 @@ class ActionContext:
 
 
 class PolicyEngine:
-    """Small default-deny policy foundation.
+    """Small default policy foundation.
 
-    This is deliberately conservative. Local policy backends can replace or
-    extend it later without changing browser engines.
+    Navigation policy and surface-interaction policy are deliberately separate.
+    A URL scheme may be forbidden as a navigation target without making an
+    already-rendered browser surface incapable of receiving pointer/keyboard
+    input.
     """
 
     def decide(self, context: ActionContext) -> Decision:
@@ -59,7 +61,12 @@ class PolicyEngine:
                 else Decision.REQUIRE_EXPLICIT_AUTHORIZATION
             )
 
-        if context.destination_url:
+        # Scheme restrictions govern creation of a network/navigation target.
+        # They do not redefine whether an already-rendered surface can receive
+        # mouse or keyboard input. about:blank/data/browser-created documents
+        # may legitimately exist inside a session without being legal remote
+        # navigation destinations.
+        if context.kind is ActionKind.NAVIGATE and context.destination_url:
             scheme = urlsplit(context.destination_url).scheme.lower()
             if scheme not in {"http", "https"}:
                 return Decision.DENY
