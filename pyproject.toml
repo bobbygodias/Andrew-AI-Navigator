@@ -1,0 +1,35 @@
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[project]
+name = "andrew-ai-navigator"
+version = "0.2.0a0"
+description = "Provider-agnostic web navigation infrastructure for AI agents"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "Apache-2.0" }
+authors = [
+  { name = "Andrew Vox Project" }
+]
+keywords = ["ai", "agents", "browser", "automation", "web", "playwright"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "License :: OSI Approved :: Apache Software License",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Topic :: Internet :: WWW/HTTP :: Browsers",
+]
+dependencies = []
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
+playwright = ["playwright>=1.55"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/andrew_ai_navigator"]
+
+[tool.pytest.ini_options]
+addopts = "-q"
+testpaths = ["tests"]
