@@ -5,6 +5,7 @@ from typing import Protocol, Sequence, runtime_checkable
 
 from .input import CoordinateFrame, MouseButton, Point
 from .models import Observation, TabRef
+from .perception import ObservationFrame
 
 
 @dataclass(frozen=True, slots=True)
@@ -19,6 +20,14 @@ class EngineCapabilities:
     keyboard_keys: bool = False
     keyboard_text: bool = False
     screenshots: bool = False
+    dom_observation: bool = False
+    accessibility_observation: bool = False
+    geometry_observation: bool = False
+    frame_observation: bool = False
+    browser_state_observation: bool = False
+    javascript: bool = False
+    cookies_storage: bool = False
+    tls_validation: bool = True
     host_io: bool = False
 
     @property
@@ -30,6 +39,14 @@ class EngineCapabilities:
             and self.keyboard_keys
             and self.keyboard_text
         )
+
+    @property
+    def surface_observer(self) -> bool:
+        return self.screenshots and self.geometry_observation
+
+    @property
+    def real_web_runtime(self) -> bool:
+        return self.javascript and self.cookies_storage and self.tls_validation
 
 
 @runtime_checkable
@@ -43,7 +60,12 @@ class BrowserEngine(Protocol):
     async def new_tab(self, session_id: str) -> TabRef: ...
     async def close_tab(self, tab: TabRef) -> None: ...
     async def navigate(self, tab: TabRef, url: str) -> None: ...
+
+    # Compact semantic observation retained for simple clients.
     async def observe(self, tab: TabRef) -> Observation: ...
+
+    # Multi-channel surface observation used by the general Navigator core.
+    async def observe_surface(self, tab: TabRef) -> ObservationFrame: ...
 
     async def click_element(self, tab: TabRef, element_id: str) -> None: ...
     async def fill_element(self, tab: TabRef, element_id: str, value: str) -> None: ...
