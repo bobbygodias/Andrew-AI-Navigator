@@ -7,6 +7,13 @@ not dependencies.
 from .engine import BrowserEngine, EngineCapabilities
 from .input import Key, MouseButton, Point
 from .models import Observation, Provenance, TabRef
+from .perception import (
+    ObservationFrame,
+    PerceptionChannel,
+    Rect,
+    SurfaceEvidence,
+    SurfaceObject,
+)
 from .policy import ActionContext, Decision, PolicyEngine
 
 __all__ = [
@@ -17,9 +24,14 @@ __all__ = [
     "Key",
     "MouseButton",
     "Observation",
+    "ObservationFrame",
+    "PerceptionChannel",
     "Point",
     "PolicyEngine",
     "Provenance",
+    "Rect",
+    "SurfaceEvidence",
+    "SurfaceObject",
     "TabRef",
 ]
 
