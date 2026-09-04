@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import re
 from pathlib import Path
 from typing import Any, Sequence
@@ -68,7 +69,7 @@ class PlaywrightEngine:
         keyboard_text=True,
         screenshots=True,
         dom_observation=True,
-        accessibility_observation=False,
+        accessibility_observation=True,
         geometry_observation=True,
         frame_observation=True,
         browser_state_observation=True,
@@ -248,6 +249,39 @@ class PlaywrightEngine:
         screenshot = await page.screenshot(type="png", full_page=False)
         self._screenshots[tab.tab_id] = (generation, screenshot)
 
+        channel_payloads: dict[PerceptionChannel, str] = {}
+
+        # Accessibility is preserved as its own raw channel instead of being
+        # flattened into DOM evidence. Playwright 1.60+ can include viewport
+        # boxes and an AI-oriented representation.
+        try:
+            aria_snapshot = await page.locator("body").aria_snapshot(
+                mode="ai",
+                boxes=True,
+                timeout=5000,
+            )
+            if aria_snapshot:
+                channel_payloads[PerceptionChannel.ACCESSIBILITY] = aria_snapshot[:100_000]
+        except Exception:
+            pass
+
+        try:
+            language_state = await page.evaluate(
+                """() => ({
+                    lang: document.documentElement.lang || '',
+                    dir: document.documentElement.dir || getComputedStyle(document.documentElement).direction || '',
+                    charset: document.characterSet || '',
+                    navigatorLanguages: Array.from(navigator.languages || [])
+                })"""
+            )
+            channel_payloads[PerceptionChannel.LANGUAGE] = json.dumps(
+                language_state,
+                ensure_ascii=False,
+                separators=(",", ":"),
+            )
+        except Exception:
+            pass
+
         objects: list[SurfaceObject] = []
         target_map: dict[str, Any] = {}
         counter = 0
@@ -355,6 +389,7 @@ class PlaywrightEngine:
             viewport=viewport,
             objects=tuple(objects),
             screenshot_ref=f"memory://{tab.tab_id}/{generation}/surface.png",
+            channel_payloads=channel_payloads,
             metadata={
                 "identity": self.identity,
                 "url": page.url,
@@ -620,11 +655,11 @@ class PlaywrightEngine:
         if tag == "select":
             return "combobox"
         if tag == "input":
-            if input_type in {"checkbox"}:
+            if input_type == "checkbox":
                 return "checkbox"
-            if input_type in {"radio"}:
+            if input_type == "radio":
                 return "radio"
-            if input_type in {"range"}:
+            if input_type == "range":
                 return "slider"
             return "textbox"
         return None
