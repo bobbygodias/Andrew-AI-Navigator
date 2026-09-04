@@ -15,6 +15,7 @@ from .perception import (
     SurfaceObject,
 )
 from .policy import ActionContext, Decision, PolicyEngine
+from .visual import VisualFrame, VisualPerceptor
 
 __all__ = [
     "ActionContext",
@@ -33,6 +34,8 @@ __all__ = [
     "SurfaceEvidence",
     "SurfaceObject",
     "TabRef",
+    "VisualFrame",
+    "VisualPerceptor",
 ]
 
 __version__ = "0.2.0a0"
