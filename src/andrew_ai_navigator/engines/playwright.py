@@ -58,6 +58,8 @@ class PlaywrightEngine:
     capabilities = EngineCapabilities(
         semantic_click=True,
         semantic_fill=True,
+        semantic_select=True,
+        semantic_focus=True,
         pointer_move=True,
         pointer_click=True,
         pointer_drag=True,
@@ -107,7 +109,6 @@ class PlaywrightEngine:
         self._generation: dict[str, int] = {}
         self._targets: dict[str, dict[str, Any]] = {}
         self._screenshots: dict[str, tuple[int, bytes]] = {}
-        self._target_cache: dict[str, tuple[str, ...]] = {}
 
     @property
     def profile_dir(self) -> Path:
@@ -139,6 +140,10 @@ class PlaywrightEngine:
             launch_kwargs["channel"] = self.browser_channel
 
         self._context = await self._pw.chromium.launch_persistent_context(**launch_kwargs)
+
+        # Best-effort application-layer destination guard. This does not claim
+        # to replace host/network egress filtering: Service Worker traffic and
+        # DNS TOCTOU require a lower-layer defense for a strong SSRF boundary.
         await self._context.route("**/*", self._route_guard)
 
         # Persistent contexts may create an initial blank page. Navigator only
@@ -191,6 +196,18 @@ class PlaywrightEngine:
         page = self._get_page(tab)
         await asyncio.to_thread(resolve_public_http_target, url)
         await page.goto(url, wait_until="domcontentloaded")
+
+        # Post-navigation validation catches an unexpected final public/private
+        # transition after the fact. Preventing every redirect/Service Worker
+        # network edge requires the planned lower-layer egress guard.
+        if urlsplit(page.url).scheme.lower() in {"http", "https"}:
+            try:
+                await asyncio.to_thread(resolve_public_http_target, page.url)
+            except UnsafeTarget:
+                await page.goto("about:blank")
+                self._invalidate(tab.tab_id)
+                raise
+
         self._invalidate(tab.tab_id)
 
     async def observe(self, tab: TabRef) -> Observation:
@@ -246,14 +263,22 @@ class PlaywrightEngine:
             for index in range(count):
                 locator = locator_set.nth(index)
                 try:
+                    # Deliberately do not read form values here. Observation is
+                    # not allowed to turn passwords, OTPs or private form data
+                    # into normal surface evidence merely because they were typed.
                     data = await locator.evaluate(
                         """el => ({
                             tag: (el.tagName || '').toLowerCase(),
                             role: el.getAttribute('role') || '',
                             aria: el.getAttribute('aria-label') || '',
+                            label: Array.from(el.labels || [])
+                                .map(label => (label.innerText || label.textContent || '').trim())
+                                .filter(Boolean).join(' ').slice(0, 500),
                             placeholder: el.getAttribute('placeholder') || '',
                             title: el.getAttribute('title') || '',
-                            value: typeof el.value === 'string' ? el.value : '',
+                            fieldName: el.getAttribute('name') || '',
+                            inputType: el.getAttribute('type') || '',
+                            autocomplete: el.getAttribute('autocomplete') || '',
                             text: (el.innerText || el.textContent || '').trim().slice(0, 500),
                             disabled: Boolean(el.disabled) || el.getAttribute('aria-disabled') === 'true'
                         })"""
@@ -268,26 +293,32 @@ class PlaywrightEngine:
 
                 counter += 1
                 object_id = f"e{counter}"
+                tag = str(data.get("tag") or "")
+                input_type = str(data.get("inputType") or "").lower()
+                role = str(data.get("role") or "") or self._implicit_role(tag, input_type)
+
                 evidence: list[SurfaceEvidence] = [
-                    SurfaceEvidence(PerceptionChannel.DOM, "tag", str(data.get("tag", ""))),
+                    SurfaceEvidence(PerceptionChannel.DOM, "tag", tag),
                     SurfaceEvidence(PerceptionChannel.FRAME, "frame", frame_id),
                     SurfaceEvidence(PerceptionChannel.GEOMETRY, "visible", "true"),
                 ]
-
-                role = str(data.get("role") or "")
                 if role:
                     evidence.append(SurfaceEvidence(PerceptionChannel.DOM, "role", role))
 
                 name = (
                     str(data.get("aria") or "")
+                    or str(data.get("label") or "")
                     or str(data.get("placeholder") or "")
                     or str(data.get("title") or "")
+                    or str(data.get("fieldName") or "")
                     or str(data.get("text") or "")
-                    or str(data.get("value") or "")
                 )
                 if name:
                     evidence.append(SurfaceEvidence(PerceptionChannel.DOM, "name", name[:500]))
-                    evidence.append(SurfaceEvidence(PerceptionChannel.DOM, "text", name[:500]))
+
+                text = str(data.get("text") or "")
+                if text:
+                    evidence.append(SurfaceEvidence(PerceptionChannel.DOM, "text", text[:500]))
 
                 rect = Rect(
                     x=float(box["x"]),
@@ -297,6 +328,13 @@ class PlaywrightEngine:
                 )
                 actionable = not bool(data.get("disabled"))
 
+                metadata: dict[str, str] = {"frame_url": browser_frame.url}
+                if input_type:
+                    metadata["input_type"] = input_type
+                autocomplete = str(data.get("autocomplete") or "")
+                if autocomplete:
+                    metadata["autocomplete"] = autocomplete
+
                 objects.append(
                     SurfaceObject(
                         id=object_id,
@@ -305,7 +343,7 @@ class PlaywrightEngine:
                         rect=rect,
                         frame_id=frame_id,
                         actionable=actionable,
-                        metadata={"frame_url": browser_frame.url},
+                        metadata=metadata,
                     )
                 )
                 target_map[object_id] = locator
@@ -324,6 +362,13 @@ class PlaywrightEngine:
             },
         )
 
+    async def surface_png(self, tab: TabRef, generation: int) -> bytes:
+        self._get_page(tab)
+        cached = self._screenshots.get(tab.tab_id)
+        if cached is None or cached[0] != generation:
+            raise StaleTarget("no screenshot exists for that observation generation")
+        return cached[1]
+
     async def click_element(self, tab: TabRef, element_id: str) -> None:
         locator = self._get_target(tab, element_id)
         await locator.click()
@@ -332,6 +377,15 @@ class PlaywrightEngine:
     async def fill_element(self, tab: TabRef, element_id: str, value: str) -> None:
         locator = self._get_target(tab, element_id)
         await locator.fill(value)
+        self._invalidate(tab.tab_id)
+
+    async def focus_element(self, tab: TabRef, element_id: str) -> None:
+        locator = self._get_target(tab, element_id)
+        await locator.focus()
+
+    async def select_element(self, tab: TabRef, element_id: str, value: str) -> None:
+        locator = self._get_target(tab, element_id)
+        await locator.select_option(value)
         self._invalidate(tab.tab_id)
 
     async def pointer_move(self, tab: TabRef, frame: CoordinateFrame, point: Point) -> None:
@@ -417,13 +471,6 @@ class PlaywrightEngine:
         self._screenshots[tab.tab_id] = (generation, image)
         return image
 
-    async def latest_surface_png(self, tab: TabRef, generation: int) -> bytes:
-        self._get_page(tab)
-        cached = self._screenshots.get(tab.tab_id)
-        if cached is None or cached[0] != generation:
-            raise StaleTarget("no screenshot exists for that observation generation")
-        return cached[1]
-
     async def _route_guard(self, route: Any) -> None:
         url = route.request.url
         scheme = urlsplit(url).scheme.lower()
@@ -436,19 +483,13 @@ class PlaywrightEngine:
             return
 
         try:
-            await asyncio.to_thread(self._resolve_cached, url)
+            # Deliberately resolve on every intercepted request rather than
+            # trusting an origin forever after one DNS lookup.
+            await asyncio.to_thread(resolve_public_http_target, url)
         except UnsafeTarget:
             await route.abort("blockedbyclient")
             return
         await route.continue_()
-
-    def _resolve_cached(self, url: str) -> None:
-        parsed = urlsplit(url)
-        origin = f"{parsed.scheme.lower()}://{parsed.hostname}:{parsed.port or (443 if parsed.scheme == 'https' else 80)}"
-        if origin in self._target_cache:
-            return
-        target = resolve_public_http_target(url)
-        self._target_cache[origin] = target.addresses
 
     def _page_created(self, page: Any) -> None:
         try:
@@ -566,4 +607,24 @@ class PlaywrightEngine:
         for item in obj.evidence:
             if item.kind == kind and item.value:
                 return item.value
+        return None
+
+    @staticmethod
+    def _implicit_role(tag: str, input_type: str) -> str | None:
+        if tag == "a":
+            return "link"
+        if tag == "button" or (tag == "input" and input_type in {"button", "submit", "reset"}):
+            return "button"
+        if tag == "textarea":
+            return "textbox"
+        if tag == "select":
+            return "combobox"
+        if tag == "input":
+            if input_type in {"checkbox"}:
+                return "checkbox"
+            if input_type in {"radio"}:
+                return "radio"
+            if input_type in {"range"}:
+                return "slider"
+            return "textbox"
         return None
