@@ -92,13 +92,19 @@ class SurfaceObject:
 
 @dataclass(frozen=True, slots=True)
 class ObservationFrame:
-    """Immutable multi-channel perception frame for one tab generation."""
+    """Immutable multi-channel perception frame for one tab generation.
+
+    `objects` stores normalized actionable/perceived objects. `channel_payloads`
+    retains useful raw channel representations that should not be flattened
+    prematurely, such as an accessibility snapshot.
+    """
 
     tab: TabRef
     generation: int
     viewport: Viewport
     objects: Sequence[SurfaceObject] = field(default_factory=tuple)
     screenshot_ref: str | None = None
+    channel_payloads: Mapping[PerceptionChannel, str] = field(default_factory=dict)
     metadata: Mapping[str, str] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
@@ -116,4 +122,5 @@ class ObservationFrame:
 
     @property
     def channels(self) -> frozenset[PerceptionChannel]:
-        return frozenset(channel for obj in self.objects for channel in obj.channels)
+        object_channels = {channel for obj in self.objects for channel in obj.channels}
+        return frozenset((*object_channels, *self.channel_payloads.keys()))
