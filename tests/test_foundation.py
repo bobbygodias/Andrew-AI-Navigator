@@ -55,6 +55,36 @@ def test_sensitive_input_requires_explicit_authorization():
     assert policy.decide(context) is Decision.REQUIRE_EXPLICIT_AUTHORIZATION
 
 
+def test_non_http_scheme_is_denied_as_navigation_target():
+    policy = PolicyEngine()
+    context = ActionContext(
+        kind=ActionKind.NAVIGATE,
+        destination_url="about:blank",
+        provenance=Provenance.AGENT,
+    )
+    assert policy.decide(context) is Decision.DENY
+
+
+def test_existing_about_blank_surface_can_receive_keyboard_input():
+    policy = PolicyEngine()
+    context = ActionContext(
+        kind=ActionKind.KEYBOARD,
+        destination_url="about:blank",
+        provenance=Provenance.AGENT,
+    )
+    assert policy.decide(context) is Decision.ALLOW
+
+
+def test_existing_data_surface_can_receive_pointer_input():
+    policy = PolicyEngine()
+    context = ActionContext(
+        kind=ActionKind.POINTER,
+        destination_url="data:text/html,hello",
+        provenance=Provenance.AGENT,
+    )
+    assert policy.decide(context) is Decision.ALLOW
+
+
 @pytest.mark.parametrize(
     "url",
     [
