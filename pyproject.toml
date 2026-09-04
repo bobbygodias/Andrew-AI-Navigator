@@ -25,7 +25,7 @@ dependencies = []
 
 [project.optional-dependencies]
 dev = ["pytest>=8.0"]
-playwright = ["playwright>=1.55"]
+playwright = ["playwright>=1.60"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/andrew_ai_navigator"]
