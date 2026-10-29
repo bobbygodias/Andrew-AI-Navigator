@@ -47,6 +47,14 @@ _INTERACTIVE_SELECTOR = (
     '[contenteditable="true"]'
 )
 
+_SENSITIVE_INPUT_SELECTOR = (
+    'input[type="password" i],'
+    'input[autocomplete*="password" i],'
+    'input[autocomplete="one-time-code" i],'
+    'input[autocomplete^="cc-" i],'
+    'textarea[autocomplete="one-time-code" i]'
+)
+
 
 class PlaywrightEngine:
     """Persistent Chromium implementation of the Navigator browser contract.
@@ -251,19 +259,32 @@ class PlaywrightEngine:
 
         channel_payloads: dict[PerceptionChannel, str] = {}
 
-        # Accessibility is preserved as its own raw channel instead of being
-        # flattened into DOM evidence. Playwright 1.60+ can include viewport
-        # boxes and an AI-oriented representation.
-        try:
-            aria_snapshot = await page.locator("body").aria_snapshot(
-                mode="ai",
-                boxes=True,
-                timeout=5000,
-            )
-            if aria_snapshot:
-                channel_payloads[PerceptionChannel.ACCESSIBILITY] = aria_snapshot[:100_000]
-        except Exception:
-            pass
+        # Playwright's raw AI-oriented ARIA snapshot can include the current
+        # *value* of password/OTP/payment inputs. Do not expose that channel
+        # when any frame contains a sensitive control. The independent DOM
+        # object channel remains available for safe element targeting.
+        # Fail closed if a frame cannot be inspected.
+        has_sensitive_controls = False
+        for browser_frame in page.frames:
+            try:
+                if await browser_frame.locator(_SENSITIVE_INPUT_SELECTOR).count():
+                    has_sensitive_controls = True
+                    break
+            except Exception:
+                has_sensitive_controls = True
+                break
+
+        if not has_sensitive_controls:
+            try:
+                aria_snapshot = await page.locator("body").aria_snapshot(
+                    mode="ai",
+                    boxes=True,
+                    timeout=5000,
+                )
+                if aria_snapshot:
+                    channel_payloads[PerceptionChannel.ACCESSIBILITY] = aria_snapshot[:100_000]
+            except Exception:
+                pass
 
         try:
             language_state = await page.evaluate(
