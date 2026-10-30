@@ -52,7 +52,17 @@ _SENSITIVE_INPUT_SELECTOR = (
     'input[autocomplete*="password" i],'
     'input[autocomplete="one-time-code" i],'
     'input[autocomplete^="cc-" i],'
-    'textarea[autocomplete="one-time-code" i]'
+    # Password/OTP/card fields are sometimes rendered as ordinary text inputs.
+    # Match common semantic hints too; false positives suppress only the
+    # optional ARIA snapshot, not DOM targeting or the rest of observation.
+    'input[name*="password" i],input[id*="password" i],'
+    'input[aria-label*="password" i],'
+    'input[name*="passcode" i],input[id*="passcode" i],'
+    'input[name*="otp" i],input[id*="otp" i],'
+    'input[name*="cvv" i],input[id*="cvv" i],'
+    'input[name*="cvc" i],input[id*="cvc" i],'
+    'textarea[autocomplete="one-time-code" i],'
+    'textarea[autocomplete*="password" i]'
 )
 
 
