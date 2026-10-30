@@ -133,3 +133,50 @@ async def _cookie_persistence(tmp_path) -> None:
 
 def test_persistent_identity_retains_cookie_across_restart(tmp_path) -> None:
     asyncio.run(_cookie_persistence(tmp_path))
+
+
+async def _disguised_sensitive_inputs_do_not_expose_aria(tmp_path) -> None:
+    engine = PlaywrightEngine(
+        identity="sensitive-aria-test",
+        runtime_root=tmp_path,
+        headless=True,
+    )
+    navigator = Navigator(engine)
+    await navigator.start()
+    try:
+        tab = await navigator.new_tab("sensitive-aria")
+        page = engine._get_page(tab)
+
+        # Some sites implement a password field with type=text (for example,
+        # when a visibility toggle changes the input type). Its semantic
+        # name must still suppress the raw AI-oriented ARIA snapshot.
+        await page.set_content(
+            '<label for="credential">Password</label>'
+            '<input id="credential" name="account_password" type="text" '
+            'value="do-not-leak-password">'
+        )
+        frame = await navigator.observe_surface(tab)
+        assert not any("accessibility" in str(key).lower() for key in frame.channel_payloads)
+
+        # Verification codes can also use type=text without autocomplete.
+        await page.set_content(
+            '<input id="verification" name="login_otp" type="text" '
+            'value="do-not-leak-otp">'
+        )
+        frame = await navigator.observe_surface(tab)
+        assert not any("accessibility" in str(key).lower() for key in frame.channel_payloads)
+
+        # The protection must inspect embedded frames, not just the top DOM.
+        await page.set_content(
+            '<iframe srcdoc="&lt;input id=&quot;secret&quot; '
+            'type=&quot;password&quot; value=&quot;iframe-secret&quot;&gt;"></iframe>'
+        )
+        await page.frame_locator("iframe").locator("#secret").wait_for()
+        frame = await navigator.observe_surface(tab)
+        assert not any("accessibility" in str(key).lower() for key in frame.channel_payloads)
+    finally:
+        await navigator.stop()
+
+
+def test_disguised_sensitive_inputs_suppress_aria_snapshots(tmp_path) -> None:
+    asyncio.run(_disguised_sensitive_inputs_do_not_expose_aria(tmp_path))
