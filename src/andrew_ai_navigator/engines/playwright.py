@@ -280,6 +280,31 @@ class PlaywrightEngine:
                 if await browser_frame.locator(_SENSITIVE_INPUT_SELECTOR).count():
                     has_sensitive_controls = True
                     break
+                # A normal text/search field or a custom contenteditable widget
+                # can contain private user-entered data even when it has no
+                # sensitive semantic label. Inspect only a boolean *inside*
+                # the frame: never return the value to the Navigator.
+                has_filled_editable = await browser_frame.evaluate(
+                    """() => Array.from(document.querySelectorAll(
+                        'input:not([type="hidden" i]),textarea,'
+                        + '[contenteditable="true"],[role="textbox"]'
+                    )).some(el => {
+                        if (el instanceof HTMLInputElement) {
+                            if (['button', 'submit', 'reset', 'checkbox',
+                                 'radio', 'file', 'image'].includes(el.type)) {
+                                return false;
+                            }
+                            return el.value.length > 0;
+                        }
+                        if (el instanceof HTMLTextAreaElement) {
+                            return el.value.length > 0;
+                        }
+                        return (el.textContent || '').trim().length > 0;
+                    })"""
+                )
+                if has_filled_editable:
+                    has_sensitive_controls = True
+                    break
             except Exception:
                 has_sensitive_controls = True
                 break
@@ -344,7 +369,12 @@ class PlaywrightEngine:
                             fieldName: el.getAttribute('name') || '',
                             inputType: el.getAttribute('type') || '',
                             autocomplete: el.getAttribute('autocomplete') || '',
-                            text: (el.innerText || el.textContent || '').trim().slice(0, 500),
+                            // Editable widgets are form data, not static
+                            // page text. Preserve labels for targeting, never
+                            // copy typed content into DOM evidence.
+                            text: el.matches('[contenteditable="true"],[role="textbox"]')
+                                ? ''
+                                : (el.innerText || el.textContent || '').trim().slice(0, 500),
                             disabled: Boolean(el.disabled) || el.getAttribute('aria-disabled') === 'true'
                         })"""
                     )
