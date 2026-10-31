@@ -166,6 +166,37 @@ async def _disguised_sensitive_inputs_do_not_expose_aria(tmp_path) -> None:
         frame = await navigator.observe_surface(tab)
         assert not any("accessibility" in str(key).lower() for key in frame.channel_payloads)
 
+        # Even a normal search field can contain private user-entered text.
+        # The accessibility channel must be suppressed without returning its
+        # value to Python.
+        await page.set_content(
+            '<input id="search" type="search" aria-label="Search" '
+            'value="private-search-query">'
+        )
+        frame = await navigator.observe_surface(tab)
+        assert not any("accessibility" in str(key).lower() for key in frame.channel_payloads)
+        assert "private-search-query" not in "\\n".join(frame.channel_payloads.values())
+
+        # Rich text editors are often contenteditable divs, not inputs.
+        # Their typed content must not enter either DOM evidence or raw ARIA.
+        await page.set_content(
+            '<div role="textbox" contenteditable="true" aria-label="Notes">'
+            'private-editor-draft</div>'
+        )
+        frame = await navigator.observe_surface(tab)
+        assert not any("accessibility" in str(key).lower() for key in frame.channel_payloads)
+        flattened_evidence = "\\n".join(
+            evidence.value for obj in frame.objects for evidence in obj.evidence
+        )
+        assert "private-editor-draft" not in flattened_evidence
+
+        # Textareas can also hold user data with no password/OTP label.
+        await page.set_content(
+            '<textarea aria-label="Message">private-message-draft</textarea>'
+        )
+        frame = await navigator.observe_surface(tab)
+        assert not any("accessibility" in str(key).lower() for key in frame.channel_payloads)
+
         # The protection must inspect embedded frames, not just the top DOM.
         await page.set_content(
             '<iframe srcdoc="&lt;input id=&quot;secret&quot; '
