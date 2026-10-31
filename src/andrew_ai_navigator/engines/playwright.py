@@ -233,7 +233,33 @@ class PlaywrightEngine:
         frame = await self.observe_surface(tab)
         page = self._get_page(tab)
         try:
-            text = await page.locator("body").inner_text(timeout=3000)
+            # body.inner_text() includes typed text in contenteditable widgets.
+            # Build a compact visible-text channel inside the browser instead,
+            # excluding form/editable descendants before any text leaves it.
+            text = await page.evaluate(
+                """() => {
+                    const walker = document.createTreeWalker(
+                        document.body, NodeFilter.SHOW_TEXT
+                    );
+                    const chunks = [];
+                    let size = 0;
+                    for (let node = walker.nextNode();
+                         node && size < 100000;
+                         node = walker.nextNode()) {
+                        const parent = node.parentElement;
+                        if (!parent || parent.closest(
+                            'script,style,noscript,textarea,[contenteditable],'
+                            + '[role="textbox"],[hidden],[aria-hidden="true"]'
+                        )) continue;
+                        if (!parent.getClientRects().length) continue;
+                        const chunk = (node.textContent || '').trim();
+                        if (!chunk) continue;
+                        chunks.push(chunk);
+                        size += chunk.length + 1;
+                    }
+                    return chunks.join('\\n').slice(0, 100000);
+                }"""
+            )
         except Exception:
             text = ""
 
