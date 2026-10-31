@@ -47,6 +47,24 @@ _INTERACTIVE_SELECTOR = (
     '[contenteditable="true"]'
 )
 
+_SENSITIVE_INPUT_SELECTOR = (
+    'input[type="password" i],'
+    'input[autocomplete*="password" i],'
+    'input[autocomplete="one-time-code" i],'
+    'input[autocomplete^="cc-" i],'
+    # Password/OTP/card fields are sometimes rendered as ordinary text inputs.
+    # Match common semantic hints too; false positives suppress only the
+    # optional ARIA snapshot, not DOM targeting or the rest of observation.
+    'input[name*="password" i],input[id*="password" i],'
+    'input[aria-label*="password" i],'
+    'input[name*="passcode" i],input[id*="passcode" i],'
+    'input[name*="otp" i],input[id*="otp" i],'
+    'input[name*="cvv" i],input[id*="cvv" i],'
+    'input[name*="cvc" i],input[id*="cvc" i],'
+    'textarea[autocomplete="one-time-code" i],'
+    'textarea[autocomplete*="password" i]'
+)
+
 
 class PlaywrightEngine:
     """Persistent Chromium implementation of the Navigator browser contract.
@@ -215,7 +233,33 @@ class PlaywrightEngine:
         frame = await self.observe_surface(tab)
         page = self._get_page(tab)
         try:
-            text = await page.locator("body").inner_text(timeout=3000)
+            # body.inner_text() includes typed text in contenteditable widgets.
+            # Build a compact visible-text channel inside the browser instead,
+            # excluding form/editable descendants before any text leaves it.
+            text = await page.evaluate(
+                """() => {
+                    const walker = document.createTreeWalker(
+                        document.body, NodeFilter.SHOW_TEXT
+                    );
+                    const chunks = [];
+                    let size = 0;
+                    for (let node = walker.nextNode();
+                         node && size < 100000;
+                         node = walker.nextNode()) {
+                        const parent = node.parentElement;
+                        if (!parent || parent.closest(
+                            'script,style,noscript,textarea,[contenteditable],'
+                            + '[role="textbox"],[hidden],[aria-hidden="true"]'
+                        )) continue;
+                        if (!parent.getClientRects().length) continue;
+                        const chunk = (node.textContent || '').trim();
+                        if (!chunk) continue;
+                        chunks.push(chunk);
+                        size += chunk.length + 1;
+                    }
+                    return chunks.join('\\n').slice(0, 100000);
+                }"""
+            )
         except Exception:
             text = ""
 
@@ -251,19 +295,57 @@ class PlaywrightEngine:
 
         channel_payloads: dict[PerceptionChannel, str] = {}
 
-        # Accessibility is preserved as its own raw channel instead of being
-        # flattened into DOM evidence. Playwright 1.60+ can include viewport
-        # boxes and an AI-oriented representation.
-        try:
-            aria_snapshot = await page.locator("body").aria_snapshot(
-                mode="ai",
-                boxes=True,
-                timeout=5000,
-            )
-            if aria_snapshot:
-                channel_payloads[PerceptionChannel.ACCESSIBILITY] = aria_snapshot[:100_000]
-        except Exception:
-            pass
+        # Playwright's raw AI-oriented ARIA snapshot can include the current
+        # *value* of password/OTP/payment inputs. Do not expose that channel
+        # when any frame contains a sensitive control. The independent DOM
+        # object channel remains available for safe element targeting.
+        # Fail closed if a frame cannot be inspected.
+        has_sensitive_controls = False
+        for browser_frame in page.frames:
+            try:
+                if await browser_frame.locator(_SENSITIVE_INPUT_SELECTOR).count():
+                    has_sensitive_controls = True
+                    break
+                # A normal text/search field or a custom contenteditable widget
+                # can contain private user-entered data even when it has no
+                # sensitive semantic label. Inspect only a boolean *inside*
+                # the frame: never return the value to the Navigator.
+                has_filled_editable = await browser_frame.evaluate(
+                    """() => Array.from(document.querySelectorAll(
+                        'input:not([type="hidden" i]),textarea,'
+                        + '[contenteditable="true"],[role="textbox"]'
+                    )).some(el => {
+                        if (el instanceof HTMLInputElement) {
+                            if (['button', 'submit', 'reset', 'checkbox',
+                                 'radio', 'file', 'image'].includes(el.type)) {
+                                return false;
+                            }
+                            return el.value.length > 0;
+                        }
+                        if (el instanceof HTMLTextAreaElement) {
+                            return el.value.length > 0;
+                        }
+                        return (el.textContent || '').trim().length > 0;
+                    })"""
+                )
+                if has_filled_editable:
+                    has_sensitive_controls = True
+                    break
+            except Exception:
+                has_sensitive_controls = True
+                break
+
+        if not has_sensitive_controls:
+            try:
+                aria_snapshot = await page.locator("body").aria_snapshot(
+                    mode="ai",
+                    boxes=True,
+                    timeout=5000,
+                )
+                if aria_snapshot:
+                    channel_payloads[PerceptionChannel.ACCESSIBILITY] = aria_snapshot[:100_000]
+            except Exception:
+                pass
 
         try:
             language_state = await page.evaluate(
@@ -313,7 +395,12 @@ class PlaywrightEngine:
                             fieldName: el.getAttribute('name') || '',
                             inputType: el.getAttribute('type') || '',
                             autocomplete: el.getAttribute('autocomplete') || '',
-                            text: (el.innerText || el.textContent || '').trim().slice(0, 500),
+                            // Editable widgets are form data, not static
+                            // page text. Preserve labels for targeting, never
+                            // copy typed content into DOM evidence.
+                            text: el.matches('[contenteditable="true"],[role="textbox"]')
+                                ? ''
+                                : (el.innerText || el.textContent || '').trim().slice(0, 500),
                             disabled: Boolean(el.disabled) || el.getAttribute('aria-disabled') === 'true'
                         })"""
                     )

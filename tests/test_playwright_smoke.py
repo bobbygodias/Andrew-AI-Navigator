@@ -133,3 +133,85 @@ async def _cookie_persistence(tmp_path) -> None:
 
 def test_persistent_identity_retains_cookie_across_restart(tmp_path) -> None:
     asyncio.run(_cookie_persistence(tmp_path))
+
+
+async def _disguised_sensitive_inputs_do_not_expose_aria(tmp_path) -> None:
+    engine = PlaywrightEngine(
+        identity="sensitive-aria-test",
+        runtime_root=tmp_path,
+        headless=True,
+    )
+    navigator = Navigator(engine)
+    await navigator.start()
+    try:
+        tab = await navigator.new_tab("sensitive-aria")
+        page = engine._get_page(tab)
+
+        # Some sites implement a password field with type=text (for example,
+        # when a visibility toggle changes the input type). Its semantic
+        # name must still suppress the raw AI-oriented ARIA snapshot.
+        await page.set_content(
+            '<label for="credential">Password</label>'
+            '<input id="credential" name="account_password" type="text" '
+            'value="do-not-leak-password">'
+        )
+        frame = await navigator.observe_surface(tab)
+        assert not any("accessibility" in str(key).lower() for key in frame.channel_payloads)
+
+        # Verification codes can also use type=text without autocomplete.
+        await page.set_content(
+            '<input id="verification" name="login_otp" type="text" '
+            'value="do-not-leak-otp">'
+        )
+        frame = await navigator.observe_surface(tab)
+        assert not any("accessibility" in str(key).lower() for key in frame.channel_payloads)
+
+        # Even a normal search field can contain private user-entered text.
+        # The accessibility channel must be suppressed without returning its
+        # value to Python.
+        await page.set_content(
+            '<input id="search" type="search" aria-label="Search" '
+            'value="private-search-query">'
+        )
+        frame = await navigator.observe_surface(tab)
+        assert not any("accessibility" in str(key).lower() for key in frame.channel_payloads)
+        assert "private-search-query" not in "\\n".join(frame.channel_payloads.values())
+
+        # Rich text editors are often contenteditable divs, not inputs.
+        # Their typed content must not enter either DOM evidence or raw ARIA.
+        await page.set_content(
+            '<p>Public page information</p>'
+            '<div role="textbox" contenteditable="true" aria-label="Notes">'
+            'private-editor-draft</div>'
+        )
+        frame = await navigator.observe_surface(tab)
+        assert not any("accessibility" in str(key).lower() for key in frame.channel_payloads)
+        flattened_evidence = "\\n".join(
+            evidence.value for obj in frame.objects for evidence in obj.evidence
+        )
+        assert "private-editor-draft" not in flattened_evidence
+        compact = await engine.observe(tab)
+        assert "private-editor-draft" not in compact.text
+        assert "Public page information" in compact.text
+
+        # Textareas can also hold user data with no password/OTP label.
+        await page.set_content(
+            '<textarea aria-label="Message">private-message-draft</textarea>'
+        )
+        frame = await navigator.observe_surface(tab)
+        assert not any("accessibility" in str(key).lower() for key in frame.channel_payloads)
+
+        # The protection must inspect embedded frames, not just the top DOM.
+        await page.set_content(
+            '<iframe srcdoc="&lt;input id=&quot;secret&quot; '
+            'type=&quot;password&quot; value=&quot;iframe-secret&quot;&gt;"></iframe>'
+        )
+        await page.frame_locator("iframe").locator("#secret").wait_for()
+        frame = await navigator.observe_surface(tab)
+        assert not any("accessibility" in str(key).lower() for key in frame.channel_payloads)
+    finally:
+        await navigator.stop()
+
+
+def test_disguised_sensitive_inputs_suppress_aria_snapshots(tmp_path) -> None:
+    asyncio.run(_disguised_sensitive_inputs_do_not_expose_aria(tmp_path))
