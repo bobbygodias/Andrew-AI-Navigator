@@ -180,6 +180,7 @@ async def _disguised_sensitive_inputs_do_not_expose_aria(tmp_path) -> None:
         # Rich text editors are often contenteditable divs, not inputs.
         # Their typed content must not enter either DOM evidence or raw ARIA.
         await page.set_content(
+            '<p>Public page information</p>'
             '<div role="textbox" contenteditable="true" aria-label="Notes">'
             'private-editor-draft</div>'
         )
@@ -189,6 +190,9 @@ async def _disguised_sensitive_inputs_do_not_expose_aria(tmp_path) -> None:
             evidence.value for obj in frame.objects for evidence in obj.evidence
         )
         assert "private-editor-draft" not in flattened_evidence
+        compact = await engine.observe(tab)
+        assert "private-editor-draft" not in compact.text
+        assert "Public page information" in compact.text
 
         # Textareas can also hold user data with no password/OTP label.
         await page.set_content(
