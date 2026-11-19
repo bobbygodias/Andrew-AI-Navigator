@@ -66,9 +66,9 @@ class PolicyEngine:
         # mouse or keyboard input. about:blank/data/browser-created documents
         # may legitimately exist inside a session without being legal remote
         # navigation destinations.
-        if context.kind is ActionKind.NAVIGATE and context.destination_url:
-            scheme = urlsplit(context.destination_url).scheme.lower()
-            if scheme not in {"http", "https"}:
+        if context.kind is ActionKind.NAVIGATE:
+            target = urlsplit(context.destination_url or "")
+            if target.scheme.lower() not in {"http", "https"} or not target.hostname:
                 return Decision.DENY
 
         return Decision.ALLOW
