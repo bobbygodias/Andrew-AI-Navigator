@@ -98,3 +98,14 @@ def test_existing_data_surface_can_receive_pointer_input():
 def test_rejects_non_web_or_protected_targets(url):
     with pytest.raises(UnsafeTarget):
         resolve_public_http_target(url)
+
+
+@pytest.mark.parametrize("url", [None, "", "https://", "http:///path", "https:relative"])
+def test_navigation_policy_rejects_missing_or_malformed_target(url):
+    policy = PolicyEngine()
+    context = ActionContext(
+        kind=ActionKind.NAVIGATE,
+        destination_url=url,
+        provenance=Provenance.AGENT,
+    )
+    assert policy.decide(context) is Decision.DENY
