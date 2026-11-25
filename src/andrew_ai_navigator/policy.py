@@ -67,8 +67,18 @@ class PolicyEngine:
         # may legitimately exist inside a session without being legal remote
         # navigation destinations.
         if context.kind is ActionKind.NAVIGATE:
-            target = urlsplit(context.destination_url or "")
-            if target.scheme.lower() not in {"http", "https"} or not target.hostname:
+            try:
+                target = urlsplit(context.destination_url or "")
+                if (
+                    target.scheme.lower() not in {"http", "https"}
+                    or not target.hostname
+                    or target.username is not None
+                    or target.password is not None
+                    or target.port == 0
+                ):
+                    return Decision.DENY
+            except ValueError:
+                # Reject malformed IPv6, invalid ports and invalid netlocs.
                 return Decision.DENY
 
         return Decision.ALLOW
