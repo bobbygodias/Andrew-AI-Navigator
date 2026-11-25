@@ -201,6 +201,15 @@ async def _disguised_sensitive_inputs_do_not_expose_aria(tmp_path) -> None:
         frame = await navigator.observe_surface(tab)
         assert not any("accessibility" in str(key).lower() for key in frame.channel_payloads)
 
+        # Payment verification fields may also appear as text inputs.
+        await page.set_content(
+            '<label for="card">CVV</label>'
+            '<input id="card" name="card_cvv" type="text" value="123">'
+        )
+        frame = await navigator.observe_surface(tab)
+        assert not any("accessibility" in str(key).lower() for key in frame.channel_payloads)
+        assert "123" not in "\\n".join(frame.channel_payloads.values())
+
         # The protection must inspect embedded frames, not just the top DOM.
         await page.set_content(
             '<iframe srcdoc="&lt;input id=&quot;secret&quot; '
