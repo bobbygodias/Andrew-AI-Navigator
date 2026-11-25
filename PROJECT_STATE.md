@@ -185,3 +185,12 @@ Only after the generic path works:
 ## Visual identity
 
 Logo/icon has intentionally **not** been chosen yet. The visual identity remains a joint design decision before implementation.
+
+
+## Security checkpoint — 2026-11-25
+
+- [PR #2](https://github.com/bobbygodias/Andrew-AI-Navigator/pull/2) was reviewed, expanded with additional fail-closed URL tests and merged into `main` (squash commit `8d6254ec684930bfead8faaa669c0bd350e91ed2`).
+- `PolicyEngine` now denies NAVIGATE with missing/malformed HTTP(S) target, malformed IPv6, invalid/zero ports, or URL-embedded credentials. Parsing exceptions fail closed.
+- The regression suite covers invalid inputs and a valid HTTPS target. The final PR-head [core-tests workflow](https://github.com/bobbygodias/Andrew-AI-Navigator/actions/runs/45718818632) completed successfully on Python 3.11 and 3.12. This does not establish real-browser or deployment-level correctness.
+- The earlier [PR #1](https://github.com/bobbygodias/Andrew-AI-Navigator/pull/1) concerns sensitive-content handling in accessibility snapshots and remains a separate, unmerged draft requiring focused security review.
+- Open architectural security work: enforce network egress at a lower layer than browser request routing, accounting for DNS TOCTOU, redirects, Service Workers and subresources. See SECURITY.md. Do not represent the navigation policy fix as a complete SSRF boundary.
