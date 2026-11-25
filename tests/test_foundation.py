@@ -109,3 +109,35 @@ def test_navigation_policy_rejects_missing_or_malformed_target(url):
         provenance=Provenance.AGENT,
     )
     assert policy.decide(context) is Decision.DENY
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "https://[::1",
+        "https://example.com:invalid",
+        "https://example.com:65536",
+        "https://example.com:0",
+        "https://bad\uff0fexample.com",
+        "https://user:pass@example.com",
+        "https://user@example.com",
+    ],
+)
+def test_navigation_policy_fails_closed_for_invalid_authorities(url):
+    policy = PolicyEngine()
+    context = ActionContext(
+        kind=ActionKind.NAVIGATE,
+        destination_url=url,
+        provenance=Provenance.AGENT,
+    )
+    assert policy.decide(context) is Decision.DENY
+
+
+def test_navigation_policy_allows_valid_http_target():
+    policy = PolicyEngine()
+    context = ActionContext(
+        kind=ActionKind.NAVIGATE,
+        destination_url="https://example.com:443/normal",
+        provenance=Provenance.AGENT,
+    )
+    assert policy.decide(context) is Decision.ALLOW
