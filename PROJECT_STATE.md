@@ -201,3 +201,4 @@ Logo/icon has intentionally **not** been chosen yet. The visual identity remains
 - Require globally routable address classification, reject multicast/reserved addresses and normalize IPv4-mapped IPv6 for policy decisions. Reject the whole answer set if any address is protected or invalid.
 - Added 27 deterministic resolver regression cases (local Python 3.13.5, all passed with synthetic DNS). Full repository CI and browser validation must be checked separately.
 - This is a preflight validation improvement only, not a DNS pinning or egress enforcement layer; redirect/subresource/Service Worker and DNS TOCTOU limitations remain open.
+- The Chromium smoke workflow now triggers on resolver changes. A browser integration regression checks denied preflight destinations and a permitted synthetic page; page routing fulfills all requests, so this test does not validate external HTTPS, DNS pinning or the context routing boundary.
