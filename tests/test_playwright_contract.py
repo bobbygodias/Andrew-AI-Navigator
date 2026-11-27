@@ -18,8 +18,8 @@ def test_identity_name_is_path_safe() -> None:
     with pytest.raises(ValueError):
         PlaywrightEngine(identity="../../escape")
 
-@pytest.mark.asyncio
-async def test_failed_navigation_invalidates_previous_targets(monkeypatch):
+def test_failed_navigation_invalidates_previous_targets(monkeypatch):
+    import asyncio
     from types import SimpleNamespace
     from unittest.mock import AsyncMock
     import andrew_ai_navigator.engines.playwright as module
@@ -31,18 +31,18 @@ async def test_failed_navigation_invalidates_previous_targets(monkeypatch):
     engine._targets["t"] = {"old": object()}
     engine._screenshots["t"] = (4, b"old")
     with pytest.raises(TimeoutError):
-        await engine.navigate(SimpleNamespace(tab_id="t"), "https://example.com")
+        asyncio.run(engine.navigate(SimpleNamespace(tab_id="t"), "https://example.com"))
     assert engine._generation["t"] > 4
     assert not engine._targets["t"]
     assert "t" not in engine._screenshots
 
 
-@pytest.mark.asyncio
-async def test_malformed_route_aborts(monkeypatch):
+def test_malformed_route_aborts(monkeypatch):
     from types import SimpleNamespace
     from unittest.mock import AsyncMock
     route = SimpleNamespace(request=SimpleNamespace(url="http://[broken"),
                             abort=AsyncMock(), continue_=AsyncMock())
-    await PlaywrightEngine(identity="testing")._route_guard(route)
+    import asyncio
+    asyncio.run(PlaywrightEngine(identity="testing")._route_guard(route))
     route.abort.assert_awaited_once_with("blockedbyclient")
     route.continue_.assert_not_awaited()
