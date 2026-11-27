@@ -214,20 +214,19 @@ class PlaywrightEngine:
     async def navigate(self, tab: TabRef, url: str) -> None:
         page = self._get_page(tab)
         await asyncio.to_thread(resolve_public_http_target, url)
-        await page.goto(url, wait_until="domcontentloaded")
-
-        # Post-navigation validation catches an unexpected final public/private
-        # transition after the fact. Preventing every redirect/Service Worker
-        # network edge requires the planned lower-layer egress guard.
-        if urlsplit(page.url).scheme.lower() in {"http", "https"}:
-            try:
-                await asyncio.to_thread(resolve_public_http_target, page.url)
-            except UnsafeTarget:
-                await page.goto("about:blank")
-                self._invalidate(tab.tab_id)
-                raise
-
+        # Navigation can mutate the page even when goto raises (timeout,
+        # cancellation or network failure). Invalidate before the attempt.
         self._invalidate(tab.tab_id)
+        try:
+            await page.goto(url, wait_until="domcontentloaded")
+            if urlsplit(page.url).scheme.lower() in {"http", "https"}:
+                try:
+                    await asyncio.to_thread(resolve_public_http_target, page.url)
+                except UnsafeTarget:
+                    await page.goto("about:blank")
+                    raise
+        finally:
+            self._invalidate(tab.tab_id)
 
     async def observe(self, tab: TabRef) -> Observation:
         frame = await self.observe_surface(tab)
@@ -595,7 +594,11 @@ class PlaywrightEngine:
 
     async def _route_guard(self, route: Any) -> None:
         url = route.request.url
-        scheme = urlsplit(url).scheme.lower()
+        try:
+            scheme = urlsplit(url).scheme.lower()
+        except (ValueError, TypeError):
+            await route.abort("blockedbyclient")
+            return
 
         if scheme in {"data", "blob", "about"}:
             await route.continue_()
