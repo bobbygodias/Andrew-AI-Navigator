@@ -224,3 +224,52 @@ async def _disguised_sensitive_inputs_do_not_expose_aria(tmp_path) -> None:
 
 def test_disguised_sensitive_inputs_suppress_aria_snapshots(tmp_path) -> None:
     asyncio.run(_disguised_sensitive_inputs_do_not_expose_aria(tmp_path))
+
+
+async def _public_target_preflight(tmp_path, monkeypatch) -> None:
+    import socket
+
+    from andrew_ai_navigator.security import UnsafeTarget
+
+    # DNS and response are synthetic: even a regression must not connect to
+    # an actual public or protected network destination during this test.
+    def lookup(host, port, **kwargs):
+        assert host == "example.com"
+        return [(socket.AF_INET, socket.SOCK_STREAM, 0, "", ("8.8.8.8", port))]
+
+    monkeypatch.setattr(socket, "getaddrinfo", lookup)
+    engine = PlaywrightEngine(
+        identity="target-preflight-test", runtime_root=tmp_path, headless=True,
+    )
+    navigator = Navigator(engine)
+    await navigator.start()
+    try:
+        tab = await navigator.new_tab("target-preflight")
+        page = engine._get_page(tab)
+        requests = []
+
+        async def synthetic_response(route):
+            requests.append(route.request.url)
+            await route.fulfill(
+                status=200, content_type="text/html", body="<p>synthetic</p>",
+            )
+
+        # Page routes take precedence over context routes: this deliberately
+        # isolates the navigate() preflight from the request-routing guard.
+        await page.route("**/*", synthetic_response)
+        initial_url = page.url
+        for target in ("http://100.64.0.1/", "http://[::ffff:127.0.0.1]/"):
+            with pytest.raises(UnsafeTarget):
+                await navigator.navigate(tab, target)
+            assert page.url == initial_url
+            assert not requests
+
+        await navigator.navigate(tab, "https://example.com/")
+        assert await page.locator("p").inner_text() == "synthetic"
+        assert requests == ["https://example.com/"]
+    finally:
+        await navigator.stop()
+
+
+def test_real_chromium_public_target_preflight(tmp_path, monkeypatch) -> None:
+    asyncio.run(_public_target_preflight(tmp_path, monkeypatch))
